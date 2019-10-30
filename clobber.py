@@ -106,15 +106,9 @@ def atomic_weight(left_end, n, right_end):
         else:
             return 1 - len(other_end)
     if n == -1 or n == -2:
-        if len(left_end) > 2 or len(right_end) > 2:
-            raise ValueError('Negative argument for n not valid unless at least both ends have length <= 2.')
-        if left_end[0] == right_end[0]:  # this must be n = -1 by parity condition
-            assert(n == -1)
-            return 0
-        # now n = -2, must be one of:
-        #    bb:-2:ww or ww:-2:bb or b:-2:w or w:-2:b (all atomic weight 0)
-        assert(n == -2)
-        return 0
+        if len(left_end) > 2 and len(right_end) > 2:
+            raise ValueError('Negative argument for n not valid unless at least one end has length <= 2.  Got: ' + str(left_end) + ' ' + str(right_end))
+        return 0  # this is either BW or one solid color, atomic weight 0.
 
     # Take symmetries into account
     if len(left_end) < len(right_end):
@@ -334,7 +328,7 @@ def evalall(a,b):
 
 # Evaluate and print atomic weights for all near-alternating Clobber positions with a <= n <= b.
 def printresults(a,b):
-    print ('.\t', 'b-w\t','bb-ww\t','b-b\t','bb-bb\t','bb-w\t','bb-b')
+    print ('.\tb-w\tbb-ww\tb-b\tbb-bb\tbb-w\tbb-b')
     for c in xrange(a, b+1):
         res = ['.']*6
         if c % 2 == 0:            
@@ -347,4 +341,4 @@ def printresults(a,b):
             res[5] = atomic_weight('bb', c, 'b')
         print (str(c) + '\t' + '\t'.join(map(str,res)))
 
-printresults(0, 30)
+#printresults(0, 30)
