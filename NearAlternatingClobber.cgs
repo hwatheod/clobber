@@ -1,0 +1,557 @@
+/*
+ * NearAlternatingClobber.cgs
+ *
+ * We study one-dimensional Clobber positions of the form X...Y where X and Y each consist of one or more stones of
+ * the same color, and ... denotes a sequence of stones of alternating colors beginning with the opposite color of
+ * X and ending with the opposite color of Y.  We call such a position *near-alternating*.
+ *
+ * By symmetry, we may assume that X is Black, and |X| >= |Y|.  We call such a position normalized.
+ *
+ * The method AtomicWeight calculates atomic weight of a near-alternating Clobber position.
+ *
+ * The method ConjecturedValue defines a conjecture for the atomic weight of all normalized near-alternating 
+ * Clobber positions.  A normalized Clobber position is defined by (a,n,b) where a and b are positive integers
+ * and n is a non-negative integer.  The position (a,n,b) consists of `a` Black stones, followed by `n` alternating
+ * White and Black stones, followed by `b` Black (if n is odd) or White (if n is even) stones.  For a fixed `a` and
+ * `b`, the conjecture states that the atomic weight of (a,n,b) is eventually periodic of order 10.
+ *
+ * References cited in the comments:
+ *  LiP: "Lessons in Play: An Introduction to Combinatorial Game Theory" by Albert, Nowakowski, and Wolfe (2nd ed)
+ *  WW: "Winning Ways for Your Mathematical Plays" by Berlekamp, Conway, and Guy (2nd ed)
+ *
+ */
+
+class NearAlternatingClobber
+
+    
+    static var cache := {=>};
+    
+    static method ResetCache()
+        NearAlternatingClobber.cache := {=>};
+    end
+    
+    static method ExpectedParity(Integer leftColor, Integer rightColor)
+        if leftColor == rightColor then
+            return 1;
+        else
+            return 0;
+        end
+    end
+    
+    static method ValidateParameters(Integer leftColor, Integer leftEnd, Integer n, Integer rightColor, Integer rightEnd)
+        if leftColor != -1 and leftColor != 1 then
+            Worksheet.Print("Invalid left color " + leftColor.ToString);
+            return false;
+        end
+        
+        if rightColor != -1 and rightColor != 1 then
+            Worksheet.Print("Invalid right color " + rightColor.ToString);
+            return false;
+        end
+ 
+        if n < -2 then
+            Worksheet.Print("n must be an integer >= -2.");
+            return false;
+        end
+        
+        if n < 0 and leftEnd > 2 and rightEnd > 2 then
+            Worksheet.Print("Negative argument for n not valid unless at least one end has length <= 2.  Got " + [leftColor, leftEnd, n, rightColor, rightEnd].ToString);
+            return false;
+        end
+        
+        if n % 2 != ExpectedParity(leftColor, rightColor) then
+            Worksheet.Print("n has incorrect parity: " + [leftColor, leftEnd, n, rightColor, rightEnd].ToString);
+            return false;
+        end
+        
+        if leftEnd <= 0 then
+            Worksheet.Print("leftEnd must be a positive integer, not " + leftEnd.ToString);
+            return false;
+        end
+        
+        if rightEnd <= 0 then
+            Worksheet.Print("rightEnd must be a positive integer, not " + rightEnd.ToString);
+            return false;
+        end
+        
+        return true;
+    end
+    
+    static method AtomicWeight(Integer leftColor, Integer leftEnd, Integer n, Integer rightColor, Integer rightEnd)
+        cacheKey := [leftColor, leftEnd, n, rightColor, rightEnd];
+        
+        // first check cache
+        cachedValue := cache[cacheKey];
+        if cachedValue != nil then
+            return cachedValue;
+        end
+
+        if not ValidateParameters(leftColor, leftEnd, n, rightColor, rightEnd) then
+            return nil;
+        end
+        
+        // Take symmetries into account
+        if leftEnd < rightEnd then
+            return AtomicWeight(rightColor, rightEnd, n, leftColor, leftEnd);
+        end
+        
+        if leftColor == -1 then
+            return -AtomicWeight(-leftColor, leftEnd, n, -rightColor, rightEnd);
+        end
+
+        /*
+          Now we are normalized so leftColor is 1 (black) and leftEnd >= rightEnd.
+        */
+        
+        if n == -2 then
+            if rightEnd == 1 then return 0; end
+            // else rightEnd == 2
+            return leftEnd - 2; // This is B^(n-1) W which has atomic weight n-2 (LiP, Lemma 9.48)
+        end
+
+        if n == -1 then return 0; end  // solid color, 0
+
+        if n == 0 then
+            if leftEnd >= 2 and rightEnd >= 2 then // B^n W^m has value 0 if n,m > 1 (LiP, Exercise 9.49)
+                return 0;
+            end
+            
+            // Otherwise, (B^n)W has atomic weight n-1 (LiP, Lemma 9.48)
+            return leftEnd - 1;
+        end
+        
+        /*          
+          We treat n=1 specially because it requires remote star comparisons otherwise.
+          See LiP, Lemma 9.52. 
+        */
+
+        if n == 1 then
+            if leftEnd == 2 and rightEnd == 1 then  // "split path" BBWB
+               return -1;
+            else
+               return rightEnd - 1;
+            end
+        end
+        
+        result := CalculateAtomicWeight(leftColor, leftEnd, n, rightColor, rightEnd);
+        cache[cacheKey] := result;
+        return result;
+    end
+
+    static method ValueFits(leftOptions, rightOptions, Integer value)
+        for leftOption in leftOptions do
+            if not leftOption <| value then return false; end
+        end
+
+        for rightOption in rightOptions do
+            if not value <| rightOption then return false; end
+        end
+
+        return true;
+    end
+    
+    static method CalculateAtomicWeight(Integer leftColor, Integer leftEnd, Integer n, Integer rightColor, Integer rightEnd)
+        if not ValidateParameters(leftColor, leftEnd, n, rightColor, rightEnd) then
+            return nil;
+        end
+        
+        // follow the atomic weight calculus
+        awLeftOptionsAdjusted := {};
+        awRightOptionsAdjusted := {};
+        
+        for r from -2 to n-2 do
+            s := n - 4 - r;
+            if r % 2 == ExpectedParity(leftColor, 1) then
+                awLeftOptionsAdjusted.Add(AtomicWeight(leftColor, leftEnd, r, 1, 2) + AtomicWeight(-1, 1, s, rightColor, rightEnd) - 2);
+                awRightOptionsAdjusted.Add(AtomicWeight(leftColor, leftEnd, r, 1, 1) + AtomicWeight(-1, 2, s, rightColor, rightEnd) + 2);
+            else
+                awLeftOptionsAdjusted.Add(AtomicWeight(leftColor, leftEnd, r, -1, 1) + AtomicWeight(1, 2, s, rightColor, rightEnd) - 2);
+                awRightOptionsAdjusted.Add(AtomicWeight(leftColor, leftEnd, r, -1, 2) + AtomicWeight(1, 1, s, rightColor, rightEnd) + 2);
+            end            
+        end
+        
+        purportedAtomicWeight := {awLeftOptionsAdjusted | awRightOptionsAdjusted};
+        
+        // if it's not an integer, then we can't be in the eccentric case
+        if not purportedAtomicWeight.IsInteger then
+            return purportedAtomicWeight;
+        end
+
+        /*
+          Apply the rules in WW, Vol 1, p. 251 (Proper Care of the Eccentric):
+            - if only one integer fits, then the atomic weight is that integer.
+            - if only positive (resp., negative) integers fit, then the atomic weight is the biggest (resp., smallest)
+              integer that fits.
+            - otherwise, two or more integers fit, including 0.  We need to compare the original game with a
+              remote star.
+              
+          For the last case, we fallback to the game.grid.Clobber implementation.
+         */
+        if purportedAtomicWeight == 0 then  // 0 fits
+            // if 0 is the only integer that fits, then the atomic weight is 0.
+            if not ValueFits(awLeftOptionsAdjusted, awRightOptionsAdjusted, 1) and not ValueFits(awLeftOptionsAdjusted, awRightOptionsAdjusted, -1) then
+                return 0;
+            end
+            
+            // fallback to built-in Clobber
+            Worksheet.Print("Remote star comparison needed for " + [leftColor, leftEnd, n, rightColor, rightEnd].ToString + ", falling back to Clobber");
+            Worksheet.Print("left adjusted is: " + awLeftOptionsAdjusted.ToString);
+            Worksheet.Print("right adjusted is: " + awRightOptionsAdjusted.ToString);
+            
+            clobberString := "";
+            if leftColor == 1 then leftColorString := "x"; else leftColorString := "o"; end
+            from 1 to leftEnd do
+                clobberString := clobberString + leftColorString;
+            end
+            if leftColorString == "x" then currColorString := "o"; else currColorString := "x"; end
+            from 1 to n do
+                clobberString := clobberString + currColorString;
+                if currColorString == "x" then currColorString := "o"; else currColorString := "x"; end
+            end
+            if (currColorString == "o" and rightColor == 1) or (currColorString == "x" and rightColor == -1) then
+                Worksheet.Print("Inconsistent parameters after validation: " + [leftColor, leftEnd, n, rightColor, rightEnd].ToString);
+                return nil;
+            end
+            from 1 to rightEnd do
+                clobberString := clobberString + currColorString;
+            end
+            return Clobber(clobberString).AtomicWeight;
+        else // if 0 doesn't fit, then all fitting integers must have the same sign
+            negative := false;
+            if purportedAtomicWeight < 0 then
+                negative := true;
+                purportedAtomicWeight := -purportedAtomicWeight;
+            end
+            
+            // add 1 until we find an integer that doesn't fit
+            purportedAtomicWeight := purportedAtomicWeight + 1;
+            while ValueFits(awLeftOptionsAdjusted, awRightOptionsAdjusted, purportedAtomicWeight) do
+                purportedAtomicWeight := purportedAtomicWeight + 1;
+            end
+
+            // take the last one that fit
+            purportedAtomicWeight := purportedAtomicWeight - 1;
+            if negative then purportedAtomicWeight := -purportedAtomicWeight; end
+            return purportedAtomicWeight;                    
+        end
+    end
+    
+    static method AtomicWeightNormalizedPosition(Integer leftEnd, Integer n, Integer rightEnd)
+        // assumes leftEnd >= rightEnd.
+        leftColor := 1;
+        if n % 2 == 1 then rightColor := 1; else rightColor := -1; end
+        return AtomicWeight(leftColor, leftEnd, n, rightColor, rightEnd);
+    end
+    
+    static method VerifyPeriodicity(Integer leftEnd, Integer rightEnd, Integer startValue, Integer endValue)
+        // assumes leftEnd >= rightEnd.
+        period := 10;
+        leftColor := 1;
+        
+        for n from startValue to endValue do
+            aw := AtomicWeightNormalizedPosition(leftEnd, n, rightEnd);
+            awNextPeriod := AtomicWeightNormalizedPosition(leftEnd, n+10, rightEnd);
+            if n < startValue + period then
+                Worksheet.Print(n.ToString + " " + aw.ToString);
+            end
+            
+            if aw != awNextPeriod then
+                Worksheet.Print("Conjecture fails at " + n.ToString + ".  The next period value is: " + awNextPeriod.ToString);
+            end        
+        end
+    end
+    
+    static method ConjecturedValue(Integer leftColor, Integer leftEnd, Integer n, Integer rightColor, Integer rightEnd)
+        if not ValidateParameters(leftColor, leftEnd, n, rightColor, rightEnd) then
+            return nil;
+        end
+        
+        if leftColor == -1 then
+            return -ConjecturedValue(-leftColor, leftEnd, n, -rightColor, rightEnd);
+        end
+        
+        if leftEnd < rightEnd then
+            return ConjecturedValue(rightColor, rightEnd, n, leftColor, leftEnd);
+        end
+        
+        return ConjecturedValueNormalized(leftEnd, n, rightEnd);
+    end
+    
+    static method ConjecturedValueNormalized(Integer leftEnd, Integer n, Integer rightEnd)        
+        a := leftEnd;
+        b := rightEnd;
+        // this code assumes a >= b.
+        if a == 1 and b == 1 and n >= 2 then // valid for all n >= 2.
+           if n % 2 == 0 then return 0; else return -1; end
+        end
+        
+        if a == 2 and b == 1 and n >= 3 then // valid for all n >= 3.
+           if n % 10 == 0 then return 1; end
+           if n % 10 == 1 then return -1/2; end
+           if n % 10 == 2 then return 1/2; end
+           if n % 10 == 3 then return 0; end
+           if n % 10 == 4 then return 1/2; end
+           if n % 10 == 5 then return -1/2; end
+           if n % 10 == 6 then return 1; end
+           if n % 10 == 7 then return 0; end
+           if n % 10 == 8 then return 1/2; end
+           if n % 10 == 9 then return 0; end
+        end
+
+        if a == 2 and b == 2 then // valid for all n >= 0.
+           if n % 10 == 0 then return 0; end
+           if n % 10 == 1 then return 1; end
+           if n % 10 == 2 then return 0; end
+           if n % 10 == 3 then return 0; end
+           if n % 10 == 4 then return 0; end
+           if n % 10 == 5 then return 1/2; end
+           if n % 10 == 6 then return *; end
+           if n % 10 == 7 then return 0; end
+           if n % 10 == 8 then return 0; end
+           if n % 10 == 9 then return 0; end       
+        end
+        
+        if a == 3 and b == 2 then // conjectured to be valid for all n >= 0
+           if n % 10 == 0 then return 0; end
+           if n % 10 == 1 then return 1; end
+           if n % 10 == 2 then return 1; end
+           if n % 10 == 3 then return 1; end
+           if n % 10 == 4 then return 1/2; end
+           if n % 10 == 5 then return 1+*; end
+           if n % 10 == 6 then return 1/2; end
+           if n % 10 == 7 then return 1; end
+           if n % 10 == 8 then return 1; end
+           if n % 10 == 9 then return 1; end                  
+        end
+        
+        if a == 3 and b == 3 and n >= 4 then // conjectured to be valid for all n >= 4
+           if n % 10 == 0 then return 0; end
+           if n % 10 == 1 then return 2; end
+           if n % 10 == 2 then return 0; end
+           if n % 10 == 3 then return 3/2; end
+           if n % 10 == 4 then return *; end
+           if n % 10 == 5 then return 3/2; end
+           if n % 10 == 6 then return 0; end
+           if n % 10 == 7 then return 2; end
+           if n % 10 == 8 then return 0; end
+           if n % 10 == 9 then return 1; end  
+        end
+        
+        if n == 0 then
+            if b == 1 then return a-1; else return 0; end
+        end
+        
+        if n == 1 then
+            if a == 2 and b == 1 then return -1; else return b-1; end
+        end
+        
+        if n == 2 then
+            if b == 1 then return {a-3 | 2}; else return {a-b-1 | 2}; end
+        end
+        
+        if n == 3 then
+            if b >= 3 then return {a-3 | 2}; end
+        end
+        
+        if n == 4 then
+            if b >= 3 then return {a-3 | 3-b}; end
+        end
+        
+        if n == 5 then
+            if b == 1 then return {a-4 | 1}; end
+            if b == 2 then return {a-2 | 1}; end
+            if b >= 4 then return {a-2 | 2}; end
+        end
+        
+        if n == 6 then
+            if b == 1 then return {a-3 | 2}; end
+            if b >= 4 then return {a-5 | a-b || 0 | 5-b}; end
+        end
+        
+        // There are no exceptional values for n=7 and n=8.
+        
+        if n == 9 then
+            if b >= 4 then return {a+b-5 | a-2 || b-2 | 3}; end
+        end
+        
+        if n == 10 then
+            if b >= 4 then return {a-4 | a-b || {0|5-b},{1|4-b}}; end
+        end
+        
+        if b == 1 then // conjectured to be valid for a >= 3 and n >= 11
+            if n % 10 == 0 then return {a-2 | 2}; end
+            if n % 10 == 1 then return {a-3 | 1}; end
+            if n % 10 == 2 then return {(2*a-5)/2 | 2}; end
+            if n % 10 == 3 then return {a-3 | 1}; end
+            if n % 10 == 4 then return {a-2 | 2}; end
+            if n % 10 == 5 then return {(2*a-7)/2 | 1}; end
+            if n % 10 == 6 then return {(2*a-5)/2| 2}; end
+            if n % 10 == 7 then return {a-3 | 1}; end
+            if n % 10 == 8 then return {(2*a-5)/2| 2}; end
+            if n % 10 == 9 then return {(2*a-7)/2 | 1}; end
+        end
+        if b == 2 then // conjectured to be valid for a >= 4 and n >= 11
+            if n % 10 == 0 then return {(a-3)+* | 1}; end
+            if n % 10 == 1 then return {a-3 | 2, 2+*}; end
+            if n % 10 == 2 then return {a-3 | 3/2 }; end
+            if n % 10 == 3 then return {a-3 | 2}; end
+            if n % 10 == 4 then return {a-3 | 1}; end
+            if n % 10 == 5 then return {a-2 | 3/2}; end
+            if n % 10 == 6 then return {a-3 | 1}; end
+            if n % 10 == 7 then return {a-3 | 2}; end
+            if n % 10 == 8 then return {a-3 | 3/2}; end
+            if n % 10 == 9 then return {(2*a-5)/2 | 3/2}; end
+        end
+        if b == 3 then // conjectured to be valid for a >= 4 and n >= 11
+            if n % 10 == 0 then return {(2*a-7)/2 | 1, 1+*}; end
+            if n % 10 == 1 then return {a-2 | 5/2}; end
+            if n % 10 == 2 then return {a-4 | 1}; end
+            if n % 10 == 3 then return {a-2 | 2}; end
+            if n % 10 == 4 then return {a-3 | 1/2}; end
+            if n % 10 == 5 then return {a-2 | 2}; end
+            if n % 10 == 6 then return {a-4 | 1}; end
+            if n % 10 == 7 then return {a-2 | 5/2}; end
+            if n % 10 == 8 then return {(2*a-7)/2 | 1/2}; end
+            if n % 10 == 9 then return {(a-2)+* | 2}; end
+        end
+        if a > b then // conjectured to be valid for b >= 4 and n >= 11
+            if n % 10 == 0 then
+                return  { a-4 | a-b || { 1/2 | 4-b}, {0 | -(2*b-9)/2} };
+            end
+
+            if n % 10 == 1 then 
+                return { a+b-6 | a-1 || b-1 | 3 };
+            end
+
+            if n % 10 == 2 then
+                return { (2*a-9)/2 | a-b || 0 | -(2*b-9)/2};
+            end
+
+            if n % 10 == 3 then
+                return { (2*a + 2*b -11)/2 | (2*a-3)/2 || (2*b-3)/2 | 3};
+            end
+
+            if n % 10 == 4 then
+                return { a-4 | (a-b) + * || 0 | 4-b };
+            end
+
+            if n % 10 == 5 then
+                return { a+b-6 | a-1, (a-1) + * || {b-1 | 3}, {(b-1) + * | 3}};
+            end
+
+            if n % 10 == 6 then
+                return { (2*a-9)/2 | a-b || 0 | -(2*b-9)/2 };
+            end
+
+            if n % 10 == 7 then
+                return { a+b-6 | a-1 || b-1 | 3 };
+            end
+
+            if n % 10 == 8 then
+                return { a-4 | a-b || 0 | 4 - b };
+            end
+
+            if n % 10 == 9 then
+                return { a+b-5 | (2*a-3)/2 || (2*b - 3)/2 | 3 };
+            end
+        end
+        
+        if a == b then // conjectured to be valid for a >= 4 and n >= 11
+            if n % 10 == 0 then return 0; end
+            if n % 10 == 1 then return a-1; end
+            if n % 10 == 2 then return 0; end
+            if n % 10 == 3 then return (2*a-3)/2; end
+            if n % 10 == 4 then return +-({a-4|0},{a-4|*}); end
+            if n % 10 == 5 then return {2*a-6|a-1,(a-1)+* ||a-1}; end
+            if n % 10 == 6 then return 0; end
+            if n % 10 == 7 then return a-1; end
+            if n % 10 == 8 then return 0; end
+            if n % 10 == 9 then return (2*a-3)/2; end
+        end
+    end
+    
+    static method VerifyConjecturedValue(Integer leftEnd, Integer n, Integer rightEnd)
+        // assumes leftEnd >= rightEnd.
+        conjectured := ConjecturedValue(leftEnd, n, rightEnd);
+        actual := AtomicWeightNormalizedPosition(leftEnd, n, rightEnd);
+        return actual == conjectured;
+    end
+    
+    static method VerifyConjectureInRange(Integer min, Integer max, Integer startValue)
+        leftColor := 1;
+        fails := [];
+        for leftEnd from min to max do
+            for rightEnd from min to leftEnd do
+                for n from startValue to startValue + 9 do
+                    if not VerifyConjecturedValue(leftEnd, n, rightEnd) then
+                        fails.Add([leftEnd, rightEnd]);
+                        break;
+                    end
+                end
+            end
+        end
+        return fails;
+    end
+    
+    static method FindMaximals(Set games)
+    // Return all maximal elements in the set games
+        maximals := {};
+        for g in games do
+            if maximals.Size == 0 then
+                maximals.Add(g);
+            else
+                isMaximal := true;
+                toRemove := {};
+                for h in maximals do
+                    if g > h then
+                        toRemove.Add(h);
+                    elseif g < h then
+                        isMaximal := false;
+                        break;
+                    end
+                end
+                if isMaximal then maximals.Add(g); end
+                for h in toRemove do
+                    maximals.Remove(h);
+                end
+            end
+        end
+        return maximals;    
+    end
+    
+    static method FindMinimals(Set games)
+    // Return all minimal elements in the set games
+        return setof(-h for h in FindMaximals(setof(-g for g in games)));
+    end
+    
+    static method OptimalAtomicWeights(Integer leftEnd, Integer n, Integer rightEnd)        
+        // follow the atomic weight calculus
+        awLeftOptionsAdjustedTagged := {};
+        awRightOptionsAdjustedTagged := {};
+        
+        leftColor := 1;
+        if n % 2 == 1 then rightColor := 1; else rightColor := -1; end
+
+        for r from -2 to n-2 do
+            s := n - 4 - r;
+            if r % 2 == ExpectedParity(leftColor, 1) then
+                awLeftOptionsAdjustedTagged.Add([r, ConjecturedValue(leftColor, leftEnd, r, 1, 2) + ConjecturedValue(-1, 1, s, rightColor, rightEnd) - 2]);
+                awRightOptionsAdjustedTagged.Add([r, ConjecturedValue(leftColor, leftEnd, r, 1, 1) + ConjecturedValue(-1, 2, s, rightColor, rightEnd) + 2]);
+            else
+                awLeftOptionsAdjustedTagged.Add([r, ConjecturedValue(leftColor, leftEnd, r, -1, 1) + ConjecturedValue(1, 2, s, rightColor, rightEnd) - 2]);
+                awRightOptionsAdjustedTagged.Add([r, ConjecturedValue(leftColor, leftEnd, r, -1, 2) + ConjecturedValue(1, 1, s, rightColor, rightEnd) + 2]);
+            end
+        end
+        
+        awLeftOptionsAdjusted := setof(t[2] for t in awLeftOptionsAdjustedTagged);
+        awRightOptionsAdjusted := setof(t[2] for t in awRightOptionsAdjustedTagged);
+        
+        leftOptimals := FindMaximals(awLeftOptionsAdjusted);
+        rightOptimals := FindMinimals(awRightOptionsAdjusted);
+        
+        leftTaggedOptimals := awLeftOptionsAdjustedTagged.Filter(t -> leftOptimals.Contains(t[2]));
+        rightTaggedOptimals := awRightOptionsAdjustedTagged.Filter(t -> rightOptimals.Contains(t[2]));
+        
+        return [leftTaggedOptimals, rightTaggedOptimals];
+    end
+end
