@@ -1,19 +1,56 @@
 /*
  * NearAlternatingClobber.cgs
  *
+ * To use this in CGSuite, copy this file to the examples directory.  Then you can call the functions using, e.g.,
+ *    examples.NearAlternatingClobber.ConjecturedValueNormalized(8, 5, 4)
+ *
  * We study one-dimensional Clobber positions of the form X...Y where X and Y each consist of one or more stones of
  * the same color, and ... denotes a sequence of stones of alternating colors beginning with the opposite color of
  * X and ending with the opposite color of Y.  We call such a position *near-alternating*.
  *
- * By symmetry, we may assume that X is Black, and |X| >= |Y|.  We call such a position normalized.
- *
  * The method AtomicWeight calculates atomic weight of a near-alternating Clobber position.
  *
- * The method ConjecturedValue defines a conjecture for the atomic weight of all normalized near-alternating 
- * Clobber positions.  A normalized Clobber position is defined by (a,n,b) where a and b are positive integers
- * and n is a non-negative integer.  The position (a,n,b) consists of `a` Black stones, followed by `n` alternating
- * White and Black stones, followed by `b` Black (if n is odd) or White (if n is even) stones.  For a fixed `a` and
- * `b`, the conjecture states that the atomic weight of (a,n,b) is eventually periodic of order 10.
+ * By symmetry, we may assume that X is Black.  We call such a position semi-normalized.
+ * If X is Black and |X| >= |Y|, we call such a position normalized.
+ *
+ * A semi-normalized Clobber position is defined by (a,n,b) where a and b are positive integers and n is a non-negative
+ * integer.  The position (a,n,b) consists of `a` Black stones, followed by `n` alternating White and Black stones,
+ * followed by `b` Black (if n is odd) or White (if n is even) stones.
+ *
+ * The method ConjecturedValueNormalized defines a conjecture for the atomic weight of all normalized near-alternating
+ * Clobber positions. For a fixed `a` and `b`, the conjecture implies that the atomic weight of (a,n,b) is eventually
+ * periodic of order 10 in n.
+ *
+ * A sketch of how one might prove the conjecture:
+ *
+ * 1. Note that the options of (a,n,b) are as follows, where r and s are integers satisfying -2 <= r <= n-2, -2 <= s <= n-2,
+ *    and r + s = n - 4.
+ *       Left options:
+ *         (a,r,2) + (-1)^(n-1) (b,s,1), r odd
+ *         (a,r,1) + (-1)^(n-1) (b,s,2), r even
+ *       Right options:
+ *         (a,r,2) + (-1)^(n-1) (b,s,1), r even
+ *         (a,r,1) + (-1)^(n-1) (b,s,2), r odd
+ *    Here we extend the notation to the values -2 and -1 by defining
+ *         (a, -2, 1) = B^(a-1)
+ *         (a, -2, 2) = B^(a-1) W
+ *         (a, -1, 1) = B^a
+ *         (a, -1, 2) = B^(a+1)
+ *
+ * 2. Prove the conjecture for the cases `a` and `b` are both <= 2.  This is a straightforward induction on n and is done at
+ *    http://xenon.stanford.edu/~hwatheod/clobber.pdf
+ *
+ * 3. Prove the conjecture for the cases b=1 and b=2, but `a` is arbitrary. Here the main task is to determine the optimal
+ *    atomic weight (maximal for Left, minimal for Right) among the options on each side.  Because b=1 or b=2, we may use
+ *    the results from step 2. In almost all cases, there is only one optimal atomic weight and it corresponds to the
+ *    option r=0 in the notation above. In a few cases, there are 2 maximal atomic weights (r=0, r=1), and there are some
+ *    further exceptional cases to be considered where r=1 or s=1 may be the optimal atomic weight. Once the optimal
+ *    atomic weights have been determined, we can apply the standard atomic weight calculus.
+ *
+ * 4. Prove the conjecture for `a` and `b` arbitrary. Using steps 1 and 3, we can obtain the atomic weights of the
+ *    options of (a,n,b) and we must again determine the optimal atomic weights. In most cases, r=0 is again the optimal
+ *    atomic weight but there are some residue classes mod 10 where there are two optimal atomic weights r=0,1 or r=0,s=0,
+ *    plus some exceptional cases involving r=1, s=0, or s=1. Again, we then apply the standard atomic weight calculus.
  *
  * References cited in the comments:
  *  LiP: "Lessons in Play: An Introduction to Combinatorial Game Theory" by Albert, Nowakowski, and Wolfe (2nd ed)
@@ -484,7 +521,7 @@ class NearAlternatingClobber
             for rightEnd from min to leftEnd do
                 for n from startValue to startValue + 9 do
                     if not VerifyConjecturedValue(leftEnd, n, rightEnd) then
-                        fails.Add([leftEnd, rightEnd]);
+                        fails.Add([leftEnd, n, rightEnd]);
                         break;
                     end
                 end
