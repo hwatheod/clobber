@@ -1,0 +1,73 @@
+/*
+ * DirectedClobber.cgs
+ *
+ * Study finite alternating directed clobber positions B -> W -> B -> W -> ....
+ *
+ * The canonical forms get very complicated, but the mean and temperature seem to 
+ * obey a simple pattern according to n mod 8, where n is the number of nodes.
+ *
+ * n mod 8       Mean     Temperature
+ * -------       ----     -----------
+ *    0         1-2^-k       1-2^-k   where k = n/4   
+ *    1            0           0
+ *    2            1           0
+ *    3            0           0
+ *    4         1-2^-k       1-2^-k   where k = n/4
+ *    5            0           1
+ *    6            1           1
+ *    7            0           1
+ */
+
+class DirectedClobber 
+
+    static var cache := {=>};
+    
+    static method ResetCache()
+        DirectedClobber.cache := {=>};
+    end
+    
+    // returns the value of the alternating directed clobber position:
+    //   B -> W -> B -> W -> ...   where there are n nodes total.    
+    static method AlternatingValue(Integer n)    
+        if n < 0 then
+            Worksheet.Print("n must be a nonnegative integer, not " + n.ToString);
+            return nil;
+        end
+
+        cachedValue := cache[n];
+        if cachedValue != nil then
+            return cachedValue;
+        end
+        
+        if n == 0 or n == 1 then
+           return 0;
+        end
+
+        leftOptions := [];
+        rightOptions := [];
+        for i from 1 to n - 1 do // the last node is not a legal move 
+            firstComponent := i - 1;
+            secondComponent := n - firstComponent - 2;
+            if i % 2 == 1 then  // Left option
+               leftOption := AlternatingValue(firstComponent) + AlternatingValue(secondComponent);
+               leftOptions.Add(leftOption);
+            else // Right option
+               rightOption := AlternatingValue(firstComponent) - AlternatingValue(secondComponent);
+               rightOptions.Add(rightOption);
+            end     
+        end
+        
+        result := { leftOptions | rightOptions };
+        cache[n] := result;
+        return result;
+    end
+    
+    // Prints a nice table of mean and temperature for alternating clobber positions for a range of values of n.
+    static method AlternatingValueTable(Integer start, Integer stop)
+        Worksheet.Print(tableof(
+           if i == 1 then listof(n for n from start to stop) 
+           else if i == 2 then listof(AlternatingValue(n).Mean for n from start to stop)
+           else listof(AlternatingValue(n).Temperature for n from start to stop) end end 
+           for i from 1 to 3))
+    end    
+end
